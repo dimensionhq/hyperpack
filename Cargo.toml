@@ -1,0 +1,11 @@
+[package]
+name = "hyperpack"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tar = "0.4.38"
+zstd = "0.11.2+zstd.1.5.2"
+bytes = "1.1.0"
