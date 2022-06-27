@@ -1,5 +1,5 @@
 pub fn get_cache_requirements(framework: &str) -> Vec<String> {
-    let mut requirements: Vec<String> = vec![String::from("node_modules/**")];
+    let mut requirements: Vec<String> = vec![String::from("node_modules/")];
 
     match framework {
         "next" => requirements.extend(vec![String::from(".next/cache/")]),
