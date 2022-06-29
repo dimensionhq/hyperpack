@@ -1,15 +1,20 @@
 use std::io::Cursor;
+use std::path::PathBuf;
 mod cache_requirements;
+use anyhow::Result;
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::region::Region;
 use sha256::digest_bytes;
+use tar::Archive;
 
 struct Storage {
+    #[allow(dead_code)]
     name: String,
     region: Region,
     credentials: Credentials,
     bucket: String,
+    #[allow(dead_code)]
     location_supported: bool,
 }
 
@@ -19,8 +24,8 @@ pub fn generate_archive(requirements: Vec<String>) -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_gz);
 
-        for requirement in requirements {
-            tar.append_dir_all(".", requirement).unwrap();
+        for requirement in requirements.iter() {
+            tar.append_dir_all(requirement, requirement).unwrap();
         }
 
         tar.finish().unwrap();
@@ -42,6 +47,7 @@ pub async fn upload_build_cache(bucket: Bucket) {
 
     let checksum = hex::encode(digest_bytes(&archive));
 
+    // todo: delete the old build cache, and update cache url
     bucket
         .put_object(format!("/{checksum}"), &archive)
         .await
@@ -51,12 +57,17 @@ pub async fn upload_build_cache(bucket: Bucket) {
 }
 
 pub async fn download_build_cache(bucket: Bucket) {
-    let data = bucket.get_object("37343461626364353139613332383234633534346163353764373539383065663261393264363663376333346337366163326439316235656164346436616539").await.unwrap();
+    let (data, _) = bucket.get_object("62303230336563313061623637363739613830316538363335366362633963326166383837653039333837613265373436376339636565643536393965663732").await.unwrap();
 
     // decompress data
     let mut decompressed_data: Vec<u8> = vec![];
 
     zstd::stream::copy_decode(Cursor::new(data), &mut decompressed_data).unwrap();
+
+    // extract the tar with the decompressed data
+    let mut archive = Archive::new(Cursor::new(decompressed_data));
+
+    archive.unpack(".").unwrap();
 }
 
 #[tokio::main]
