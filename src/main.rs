@@ -1,9 +1,9 @@
 use std::io::Cursor;
 mod cache_requirements;
-mod helpers;
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::region::Region;
+use sha256::digest_bytes;
 
 struct Storage {
     name: String,
@@ -13,7 +13,7 @@ struct Storage {
     location_supported: bool,
 }
 
-pub fn generate_archive(requirements: Vec<String>) {
+pub fn generate_archive(requirements: Vec<String>) -> Vec<u8> {
     let mut tar_gz: Vec<u8> = vec![];
 
     {
@@ -29,13 +29,42 @@ pub fn generate_archive(requirements: Vec<String>) {
     let mut compressed_tar: Vec<u8> = vec![];
 
     zstd::stream::copy_encode(Cursor::new(tar_gz), &mut compressed_tar, 10).unwrap();
+
+    println!("🚀 Build archive generated");
+
+    compressed_tar
 }
 
-fn main() {
+pub async fn upload_build_cache(bucket: Bucket) {
+    let requirements = cache_requirements::get_cache_requirements("next");
+
+    let archive = generate_archive(requirements);
+
+    let checksum = hex::encode(digest_bytes(&archive));
+
+    bucket
+        .put_object(format!("/{checksum}"), &archive)
+        .await
+        .unwrap();
+
+    println!("☁️  Uploaded build cache to S3");
+}
+
+pub async fn download_build_cache(bucket: Bucket) {
+    let data = bucket.get_object("37343461626364353139613332383234633534346163353764373539383065663261393264363663376333346337366163326439316235656164346436616539").await.unwrap();
+
+    // decompress data
+    let mut decompressed_data: Vec<u8> = vec![];
+
+    zstd::stream::copy_decode(Cursor::new(data), &mut decompressed_data).unwrap();
+}
+
+#[tokio::main]
+async fn main() {
     let start = std::time::Instant::now();
 
     let vultr = Storage {
-        name: "vultr".into(),
+        name: "hyperpack".into(),
         region: Region::Custom {
             region: "ewr1".into(),
             endpoint: "https://ewr1.vultrobjects.com".into(),
@@ -46,7 +75,7 @@ fn main() {
             security_token: None,
             session_token: None,
         },
-        bucket: "hyperpack".into(),
+        bucket: "builds".into(),
         location_supported: false,
     };
 
@@ -54,16 +83,13 @@ fn main() {
         .unwrap()
         .with_path_style();
 
-    println!("{}", bucket.url());
+    // Upload build cache
+    // upload_build_cache(bucket).await;
 
-    //     for (list, code) in results {
-    //     assert_eq!(200, code);
-    //     println!("{:?}", list.contents.len());
-    // }
+    // Download build cache
+    download_build_cache(bucket).await;
 
-    let requirements = cache_requirements::get_cache_requirements("next");
-
-    generate_archive(requirements);
+    // Update the build cache address in the API.
 
     println!(
         "Execution completed in {} seconds",
