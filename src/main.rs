@@ -1,7 +1,5 @@
 use std::io::Cursor;
-use std::path::PathBuf;
 mod cache_requirements;
-use anyhow::Result;
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::region::Region;
@@ -57,7 +55,10 @@ pub async fn upload_build_cache(bucket: Bucket) {
 }
 
 pub async fn download_build_cache(bucket: Bucket) {
-    let (data, _) = bucket.get_object("62303230336563313061623637363739613830316538363335366362633963326166383837653039333837613265373436376339636565643536393965663732").await.unwrap();
+    let (data, _) = bucket
+        .get_object(std::env::args().collect::<Vec<String>>()[2].as_str())
+        .await
+        .unwrap();
 
     // decompress data
     let mut decompressed_data: Vec<u8> = vec![];
@@ -94,14 +95,15 @@ async fn main() {
         .unwrap()
         .with_path_style();
 
-    // Upload build cache
-    // upload_build_cache(bucket).await;
+    let args: Vec<String> = std::env::args().collect();
 
-    // Download build cache
-    download_build_cache(bucket).await;
+    match args[1].as_str() {
+        "upload" => upload_build_cache(bucket).await,
+        "download" => download_build_cache(bucket).await,
+        &_ => println!("Invalid Command"),
+    }
 
     // Update the build cache address in the API.
-
     println!(
         "Execution completed in {} seconds",
         start.elapsed().as_secs_f32()
