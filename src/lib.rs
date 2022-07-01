@@ -16,7 +16,17 @@ struct Storage {
     location_supported: bool,
 }
 
-pub fn generate_archive(requirements: Vec<String>) -> Vec<u8> {
+pub struct Options {
+    command: CommandType,
+    bucket_id: Option<String>,
+}
+
+pub enum CommandType {
+    Upload,
+    Download,
+}
+
+fn generate_archive(requirements: Vec<String>) -> Vec<u8> {
     let mut tar_gz: Vec<u8> = vec![];
 
     {
@@ -38,7 +48,7 @@ pub fn generate_archive(requirements: Vec<String>) -> Vec<u8> {
     compressed_tar
 }
 
-pub async fn upload_build_cache(bucket: Bucket) {
+async fn upload_build_cache(bucket: Bucket) {
     let requirements = cache_requirements::get_cache_requirements("next");
 
     let archive = generate_archive(requirements);
@@ -54,11 +64,8 @@ pub async fn upload_build_cache(bucket: Bucket) {
     println!("☁️  Uploaded build cache to S3");
 }
 
-pub async fn download_build_cache(bucket: Bucket) {
-    let (data, _) = bucket
-        .get_object(std::env::args().collect::<Vec<String>>()[2].as_str())
-        .await
-        .unwrap();
+async fn download_build_cache(bucket: Bucket, id: &str) {
+    let (data, _) = bucket.get_object(id).await.unwrap();
 
     // decompress data
     let mut decompressed_data: Vec<u8> = vec![];
@@ -71,10 +78,7 @@ pub async fn download_build_cache(bucket: Bucket) {
     archive.unpack(".").unwrap();
 }
 
-#[tokio::main]
-async fn main() {
-    let start = std::time::Instant::now();
-
+fn get_bucket() -> Bucket {
     let vultr = Storage {
         name: "hyperpack".into(),
         region: Region::Custom {
@@ -91,21 +95,16 @@ async fn main() {
         location_supported: false,
     };
 
-    let bucket = Bucket::new(&vultr.bucket, vultr.region, vultr.credentials)
+    Bucket::new(&vultr.bucket, vultr.region, vultr.credentials)
         .unwrap()
-        .with_path_style();
+        .with_path_style()
+}
 
-    let args: Vec<String> = std::env::args().collect();
+pub async fn run(options: Options) {
+    let bucket = get_bucket();
 
-    match args[1].as_str() {
-        "upload" => upload_build_cache(bucket).await,
-        "download" => download_build_cache(bucket).await,
-        &_ => println!("Invalid Command"),
+    match options.command {
+        CommandType::Upload => upload_build_cache(bucket).await,
+        CommandType::Download => download_build_cache(bucket, &options.bucket_id.unwrap()).await,
     }
-
-    // Update the build cache address in the API.
-    println!(
-        "Execution completed in {} seconds",
-        start.elapsed().as_secs_f32()
-    );
 }
