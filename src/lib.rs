@@ -16,11 +16,13 @@ struct Storage {
     location_supported: bool,
 }
 
+#[derive(Clone, Debug)]
 pub struct Options {
-    command: CommandType,
-    bucket_id: Option<String>,
+    pub command: CommandType,
+    pub bucket_id: Option<String>,
 }
 
+#[derive(Clone, Debug)]
 pub enum CommandType {
     Upload,
     Download,
